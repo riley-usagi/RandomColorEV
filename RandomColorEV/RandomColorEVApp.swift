@@ -4,12 +4,14 @@ import SwiftUI
 
 // MARK: - Protocol
 
-protocol InnerViewAction {}
+protocol InnerViewAction: Equatable {
+  static var `default`: Self { get }
+}
 
 
 // MARK: - Action Wrapper
 
-@propertyWrapper public struct Action<T> {
+@propertyWrapper struct Action<T: InnerViewAction> {
   
   private let currentValue: CurrentValueSubject<T, Never>
   
@@ -19,7 +21,7 @@ protocol InnerViewAction {}
     
     _ = eventSubject
     
-      .flatMap { receivedEvent -> AnyPublisher<InnerViewAction, Never> in
+      .flatMap { receivedEvent -> AnyPublisher<any InnerViewAction, Never> in
         return EventEnum.actionsByEvent(receivedEvent).publisher.eraseToAnyPublisher()
       }
     
@@ -37,6 +39,7 @@ protocol InnerViewAction {}
     
     nonmutating set {
       currentValue.value = newValue
+      currentValue.value = T.default
     }
   }
   
@@ -44,6 +47,7 @@ protocol InnerViewAction {}
     get {
       currentValue
         .compactMap({ $0 })
+        .drop { $0 == T.default }
         .eraseToAnyPublisher()
     }
   }
@@ -84,6 +88,7 @@ let eventSubject: CurrentValueSubject<EventEnum, Never> = .init(.initial)
   
   var body: some Scene {
     WindowGroup {
+      
       TabView(selection: $selectedTab) {
         LeftScreen()
           .tag(TabItem.left)
@@ -94,7 +99,9 @@ let eventSubject: CurrentValueSubject<EventEnum, Never> = .init(.initial)
         RightScreen()
           .tag(TabItem.right)
       }
+      
       .ignoresSafeArea()
+      
       .tabViewStyle(PageTabViewStyle())
     }
   }
@@ -110,12 +117,15 @@ struct LeftScreen: View {
   @State var color: Color? = nil
   
   var body: some View {
+    
     ZStack {
       color ?? .white
       Text("Left").font(.largeTitle).foregroundColor(color != nil ? .white : .black)
     }
+    
     .ignoresSafeArea()
-    .onReceive($action.dropFirst()) { newAction in
+    
+    .onReceive($action) { newAction in
       switch newAction {
         
       case .initial:
@@ -128,6 +138,8 @@ struct LeftScreen: View {
   }
   
   enum InnerAction: InnerViewAction {
+    static var `default`: LeftScreen.InnerAction { .initial }
+    
     case initial
     case changeLeftColor
   }
@@ -159,6 +171,7 @@ struct CenterScreen: View {
       }
     }
     .ignoresSafeArea()
+    
   }
 }
 
@@ -172,12 +185,15 @@ struct RightScreen: View {
   @State var color: Color? = nil
   
   var body: some View {
+    
     ZStack {
       color ?? .white
       Text("Right").font(.largeTitle).foregroundColor(color != nil ? .white : .black)
     }
+    
     .ignoresSafeArea()
-    .onReceive($action.dropFirst()) { newAction in
+    
+    .onReceive($action) { newAction in
       switch newAction {
         
       case .initial:
@@ -190,6 +206,8 @@ struct RightScreen: View {
   }
   
   enum InnerAction: InnerViewAction {
+    static var `default`: RightScreen.InnerAction { .initial }
+    
     case initial
     case changeRightColor
   }
