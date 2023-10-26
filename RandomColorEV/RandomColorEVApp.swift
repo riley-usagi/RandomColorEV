@@ -2,16 +2,21 @@ import Combine
 import SwiftUI
 
 
+// MARK: - Subject
+
+let eventSubject: PassthroughSubject<EventEnum, Never> = .init()
+
+
 // MARK: - Protocol
 
-protocol InnerViewAction: Equatable {
+protocol ViewAction: Equatable, CaseIterable {
   static var `default`: Self { get }
 }
 
 
 // MARK: - Action Wrapper
 
-@propertyWrapper struct Action<T: InnerViewAction> {
+@propertyWrapper struct Action<T: ViewAction> {
   
   private let currentValue: CurrentValueSubject<T, Never>
   
@@ -21,12 +26,18 @@ protocol InnerViewAction: Equatable {
     
     _ = eventSubject
     
-      .flatMap { receivedEvent -> AnyPublisher<any InnerViewAction, Never> in
-        return EventEnum.actionsByEvent(receivedEvent).publisher.eraseToAnyPublisher()
+      .map { receivedEvent in
+        (receivedEvent, T.allCases)
       }
     
-      .compactMap { receivedAction in
-        return receivedAction as? T
+      .filter { receivedEvent, allCases in
+        allCases.contains {
+          receivedCase in String(reflecting: receivedCase).contains(receivedEvent.rawValue)
+        }
+      }
+    
+      .flatMap { _, filteredCases -> AnyPublisher<T, Never> in
+        filteredCases.publisher.eraseToAnyPublisher()
       }
     
       .subscribe(on: DispatchQueue.main)
@@ -56,24 +67,11 @@ protocol InnerViewAction: Equatable {
 
 // MARK: - Event
 
-enum EventEnum: Equatable {
+enum EventEnum: String, Equatable {
+  
   case initial
   case changeBothSidesColors
-  
-  static func actionsByEvent(_ event: Self) -> [any InnerViewAction] {
-    switch event {
-    case .initial:
-      return []
-    case .changeBothSidesColors:
-      return [LeftScreen.InnerAction.changeLeftColor, RightScreen.InnerAction.changeRightColor]
-    }
-  }
 }
-
-
-// MARK: - Subject
-
-let eventSubject: CurrentValueSubject<EventEnum, Never> = .init(.initial)
 
 
 // MARK: - Main
@@ -131,17 +129,17 @@ struct LeftScreen: View {
       case .initial:
         break
         
-      case .changeLeftColor:
+      case .changeLeftColor_changeBothSidesColors:
         color = randomColor()
       }
     }
   }
   
-  enum InnerAction: InnerViewAction {
+  enum InnerAction: String, ViewAction, CaseIterable {
     static var `default`: LeftScreen.InnerAction { .initial }
     
     case initial
-    case changeLeftColor
+    case changeLeftColor_changeBothSidesColors
   }
 }
 
@@ -199,17 +197,23 @@ struct RightScreen: View {
       case .initial:
         break
         
-      case .changeRightColor:
+      case .changeRightColor_changeBothSidesColors:
         color = randomColor()
       }
     }
   }
   
-  enum InnerAction: InnerViewAction {
+  enum ChangeBothSidesColors: String, ViewAction, CaseIterable {
+    static var `default`: RightScreen.ChangeBothSidesColors { .initial }
+    
+    case initial
+  }
+  
+  enum InnerAction: ViewAction {
     static var `default`: RightScreen.InnerAction { .initial }
     
     case initial
-    case changeRightColor
+    case changeRightColor_changeBothSidesColors
   }
 }
 
